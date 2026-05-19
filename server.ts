@@ -1,10 +1,14 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import sqlite3 from 'sqlite3';
 import cors from 'cors';
+import jwt from 'jsonwebtoken'; 
+
 
 console.log("🚀 Iniciando servidor...");
 
 const app = express();
+const SECRET_KEY = "chave_secreta_jwt"; // Em produção, use variáveis de ambiente
+
 app.use(cors());
 app.use(express.json());
 
@@ -16,6 +20,19 @@ const db = new sqlite3.Database('./clinica.sqlite', (err: Error | null) => {
         console.log('✅ Banco de dados conectado.');
     }
 });
+
+const verificarToken = (req: Request, res: Response, next: NextFunction) => {
+    const token = req.headers['authorization'] as string;
+    if (!token) return res.status(403).json({ error: "Acesso negado. Token não fornecido." });
+
+    const tokenLimpo = token.startsWith('Bearer ') ? token.split(' ') [1] : token;
+
+    jwt.verify(tokenLimpo, SECRET_KEY, (err: any, decoded: any) => {
+        if (err) return res.status(401).json({ error: "Token inválido ou expirado." });
+        (req as any).user = decoded;
+        next(); // Seguindo para a rota
+    });
+};
 
 // 🔹 Criação das tabelas e dados iniciais
 db.serialize(() => {
@@ -65,13 +82,23 @@ db.serialize(() => {
     });
 });
 
+app.post('/api/login', (req: Request, res: Response) => {
+    const { username, password } = req.body;
+
+    // Simular validação (Username: admin / Senha: 123)
+    if (username === 'admin' && password === '123') {
+        const token = jwt.sign({ user: username }, SECRET_KEY, { expiresIn: '1h' });
+        return res.json({ auth: true, token });
+    }
+    res.status(401).json({ error: "Usuário ou senha incorretos!" });
+});
 // 🔹 Teste rápido da API
-app.get('/', (req: Request, res: Response) => {
+app.get('/', (_req: Request, res: Response) => {
     res.send('✅ API funcionando!');
 });
 
 // 🔹 Etapa 5
-app.get('/api/etapa5', (req: Request, res: Response) => {
+app.get('/api/etapa5', verificarToken, (_req: Request, res: Response) => {
     db.all("SELECT * FROM pacientes", [], (err: Error | null, rows: any[]) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ pacientes: rows });
@@ -79,7 +106,7 @@ app.get('/api/etapa5', (req: Request, res: Response) => {
 });
 
 // 🔹 Etapa 6 - JOIN básico
-app.get('/api/etapa6', (req: Request, res: Response) => {
+app.get('/api/etapa6', verificarToken, (_req: Request, res: Response) => {
     const sql = `
         SELECT p.nome, c.data_consulta 
         FROM pacientes p 
@@ -92,7 +119,7 @@ app.get('/api/etapa6', (req: Request, res: Response) => {
 });
 
 // 🔹 Etapa 7 - JOIN completo
-app.get('/api/etapa7', (req: Request, res: Response) => {
+app.get('/api/etapa7', verificarToken, (_req: Request, res: Response) => {
     const sql = `
         SELECT p.nome, s.descricao AS sintoma 
         FROM pacientes p
@@ -107,7 +134,7 @@ app.get('/api/etapa7', (req: Request, res: Response) => {
 });
 
 // 🔹 Etapa 8 - Filtro
-app.get('/api/etapa8', (req: Request, res: Response) => {
+app.get('/api/etapa8', verificarToken, (_req: Request, res: Response) => {
     const sql = `
         SELECT p.nome 
         FROM pacientes p
@@ -123,7 +150,7 @@ app.get('/api/etapa8', (req: Request, res: Response) => {
 });
 
 // 🔹 Etapa 9 - Agregação
-app.get('/api/etapa9', (req: Request, res: Response) => {
+app.get('/api/etapa9', verificarToken, (_req: Request, res: Response) => {
     const sql = `
         SELECT p.nome, COUNT(c.id) as total_consultas 
         FROM pacientes p
@@ -137,7 +164,7 @@ app.get('/api/etapa9', (req: Request, res: Response) => {
 });
 
 // 🔹 Etapa 10 - Desafio
-app.get('/api/etapa10', (req: Request, res: Response) => {
+app.get('/api/etapa10', verificarToken, (_req: Request, res: Response) => {
     const sql = `
         SELECT s.descricao, COUNT(cs.sintoma_id) as frequencia
         FROM consulta_sintoma cs
@@ -191,7 +218,7 @@ if (
                     const consulta_id = this.lastID;
 
                     db.get(`SELECT id FROM sintomas WHERE descricao = ?`, [sintoma],
-                        (err: Error | null, row: any) => {
+                        (_err: Error | null, row: any) => {
 
                             if (row) {
                                 vincular(consulta_id, row.id);
@@ -206,7 +233,7 @@ if (
                     function vincular(c_id: number, s_id: number) {
                         db.run(`INSERT INTO consulta_sintoma (consulta_id, sintoma_id) VALUES (?, ?)`,
                             [c_id, s_id],
-                            (err: Error | null) => {
+                            (_err: Error | null) => {
 
                                 if (err) return res.status(500).json({ error: err.message });
 
@@ -228,6 +255,35 @@ if (
                 inserirConsulta(this.lastID);
             });
         }
+    });
+});
+
+// Atualizar Paciente (PUT) - PROTEGIDA
+app.put('/api/atendimento/:id', verificarToken, (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { nome } = req.body;
+    db.run(`UPDATE pacientes SET nome = ? WHERE id = ?`, [nome, id], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: "Nome atualizado!" });
+    });
+});
+
+// Deletar Paciente (DELETE) - PROTEGIDA
+app.delete('/api/atendimento/:id', verificarToken, (req: Request, res: Response) => {
+    const { id } = req.params;
+    
+    db.run(`DELETE FROM consulta_sintoma WHERE consulta_id IN (SELECT id FROM consultas WHERE paciente_id = ?)`,
+         [id], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        db.run(`DELETE FROM consultas WHERE paciente_id = ?`, [id], (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            db.run(`DELETE FROM pacientes WHERE id = ?`, [id], function(err) {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ message: "Registro removido com sucesso!" });
+            });
+        });
     });
 });
 
