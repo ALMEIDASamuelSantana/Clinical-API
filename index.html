@@ -4,110 +4,153 @@
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Painel da Clínica</title>
 
-<style>
-:root {
-    --primary: #2563eb;
-    --bg: #f8fafc;
-    --surface: #ffffff;
-    --text: #1e293b;
-}
+<title>Triagem Clínica</title>
 
-body {
-    font-family: 'Segoe UI', system-ui, sans-serif;
-    background-color: var(--bg);
-    color: var(--text);
-    margin: 0;
-    padding: 2rem;
-    display: flex;
-    justify-content: center;
-}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
-.container {
-    background: var(--surface);
-    padding: 2rem;
-    border-radius: 12px;
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-    max-width: 700px;
-    width: 100%;
-}
+<link
+href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+rel="stylesheet"
+>
 
-h1 {
-    margin-top: 0;
-    color: var(--primary);
-}
+<link rel="stylesheet" href="style.css">
 
-.section {
-    margin-bottom: 25px;
-}
-
-input {
-    padding: 10px;
-    border-radius: 6px;
-    border: 1px solid #94a3b8;
-    width: 100%;
-}
-
-.row {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 10px;
-}
-
-button {
-    background-color: var(--primary);
-    color: white;
-    border: none;
-    padding: 10px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: 600;
-}
-
-button:hover {
-    opacity: 0.9;
-}
-
-.grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-}
-
-#desafio-btn {
-    grid-column: span 2;
-    background: #059669;
-    padding: 14px;
-}
-
-.resultado {
-    background: #f1f5f9;
-    padding: 15px;
-    border-radius: 6px;
-    border: 1px solid #cbd5e1;
-    min-height: 120px;
-    white-space: pre-wrap;
-    font-family: monospace;
-}
-</style>
 </head>
 
 <body>
 
 <div class="container">
 
-<h1>Dashboard Clínica</h1>
+    <!-- LOGIN -->
 
-<!-- REGISTRO -->
-<div class="section">
-    <h3>🩺 Novo Atendimento</h3>
-    <div class="row">
-        <input type="text" id="nome" placeholder="Nome do paciente">
-        <input type="text" id="sintoma" placeholder="Sintoma">
+    <div id="login-section" class="login-card">
+
+        <h2 class="login-title">
+            🏥 Sistema de Triagem
+        </h2>
+
+        <input
+            type="text"
+            id="user"
+            placeholder="Usuário"
+        >
+
+        <input
+            type="password"
+            id="pass"
+            placeholder="Senha"
+        >
+
+        <button
+            class="btn-primary"
+            style="width:100%;"
+            onclick="realizarLogin()"
+        >
+            Entrar no Sistema
+        </button>
+
     </div>
-    <button onclick="registrarAtendimento()">Salvar Atendimento</button>
-</div>
+
+    <!-- DASHBOARD -->
+
+    <div id="dashboard-section" class="hidden">
+
+        <div class="header">
+
+            <div>
+                <h1>🏥 Painel de Triagem Clínica</h1>
+
+                <p>
+                    Monitoramento rápido de sintomas e atendimentos.
+                </p>
+            </div>
+
+            <button class="logout" onclick="logout()">
+                Sair
+            </button>
+
+        </div>
+
+        <!-- TRIAGEM -->
+
+        <div class="triagem-grid">
+
+            <div class="triagem-card febre">
+                <h2>🌡️ Febre</h2>
+                <p>Monitoramento de pacientes febris.</p>
+            </div>
+
+            <div class="triagem-card tontura">
+                <h2>💫 Tontura</h2>
+                <p>Acompanhamento clínico inicial.</p>
+            </div>
+
+            <div class="triagem-card dor">
+                <h2>🤕 Dor de Cabeça</h2>
+                <p>Registro de cefaleias e sintomas.</p>
+            </div>
+
+            <div class="triagem-card pressao">
+                <h2>🩺 Pressão</h2>
+                <p>Controle de pressão arterial.</p>
+            </div>
+
+        </div>
+
+        <!-- NOVO ATENDIMENTO -->
+
+        <div class="card">
+
+            <div class="card-title">
+                📝 Novo Atendimento
+            </div>
+
+            <div class="row">
+
+                <input
+                    type="text"
+                    id="nome"
+                    placeholder="Nome do paciente"
+                >
+
+                <input
+                    type="text"
+                    id="sintoma"
+                    placeholder="Sintoma"
+                >
+
+                <button
+                    class="btn-success"
+                    onclick="registrarAtendimento()"
+                >
+                    Registrar
+                </button>
+
+            </div>
+
+        </div>
+
+        <!-- GESTÃO -->
+
+        <div class="card">
+
+            <div class="card-title">
+                👥 Gestão de Pacientes
+            </div>
+
+            <button
+                class="btn-primary"
+                onclick="listarPacientesParaGestao()"
+                style="margin-bottom:20px;"
+            >
+                Carregar Pacientes
+            </button>
+
+            <div id="lista-gestao"></div>
+
+        </div>
 
         <!-- CONSULTAS -->
 
@@ -176,63 +219,7 @@ Aguardando ações...
 
 </div>
 
-<script>
-const API_URL = 'http://localhost:3000/api';
-
-// GET
-async function fetchData(endpoint) {
-    const box = document.getElementById('resultado');
-    box.innerHTML = "Carregando...";
-
-    try {
-        const response = await fetch(`${API_URL}/${endpoint}`);
-        const data = await response.json();
-
-        if (endpoint === 'etapa10') {
-            box.innerHTML = 
-`🏆 Sintoma mais frequente: ${data.descricao}
-📊 Frequência: ${data.frequencia}`;
-        } else {
-            box.innerHTML = JSON.stringify(data, null, 2);
-        }
-
-    } catch (error) {
-        box.innerHTML = "Erro ao conectar com a API.";
-    }
-}
-
-// POST
-async function registrarAtendimento() {
-    const nome = document.getElementById('nome').value;
-    const sintoma = document.getElementById('sintoma').value;
-    const box = document.getElementById('resultado');
-
-    if (!nome || !sintoma) {
-        box.innerHTML = "Preencha nome e sintoma!";
-        return;
-    }
-
-    try {
-        const response = await fetch(`${API_URL}/atendimento`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ nome, sintoma })
-        });
-
-        const data = await response.json();
-
-        box.innerHTML = 
-`✅ ${data.message}
-Paciente: ${data.paciente}
-Sintoma: ${data.sintoma}`
-
-    } catch (error) {
-        box.innerHTML = "Erro ao salvar atendimento.";
-    }
-}
-</script>
+<script src="script.js"></script>
 
 </body>
 </html>
