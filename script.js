@@ -178,63 +178,72 @@ async function fetchData(endpoint){
 }
 
 /* REGISTRAR */
-
 async function registrarAtendimento(){
-
-    const nome =
-        document.getElementById('nome').value;
-
-    const sintoma =
-        document.getElementById('sintoma').value;
-
-    const box =
-        document.getElementById('resultado');
+    const nome = document.getElementById('nome').value;
+    const sintoma = document.getElementById('sintoma').value;
+    const box = document.getElementById('resultado');
 
     if(!nome || !sintoma){
-
-        box.innerHTML =
-            "Preencha todos os campos!";
-
+        box.innerHTML = "Preencha todos os campos!";
         return;
-
     }
 
-    try{
+    box.innerHTML = "🧠 IA analisando sintoma para pré-triagem...";
 
-        const response = await fetch(
-            `${API_URL}/atendimento`,
-            {
-
-                method:'POST',
-
-                headers:{
-                    'Content-Type':'application/json',
-                    'Authorization':`Bearer ${TOKEN}`
-                },
-
-                body:JSON.stringify({
-                    nome,
-                    sintoma
-                })
-
-            }
-        );
+    try {
+        const response = await fetch(`${API_URL}/pre-triagem`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${TOKEN}`
+            },
+            body: JSON.stringify({ sintoma })
+        });
 
         const data = await response.json();
 
-        box.innerHTML =
+        box.innerHTML = `
+            <div style="background: #eef2f7; padding: 15px; border-radius: 8px; margin-bottom: 15px; color: #333;">
+                <strong>🤖 Pré-Triagem da IA:</strong>
+                <p>${data.analise}</p>
+            </div>
+            <p>Deseja confirmar o atendimento para o paciente <strong>${nome}</strong>?</p>
+            <button class="btn-success" onclick="confirmarSalvarAtendimento('${nome}', '${sintoma}')">
+                Sim, Confirmar e Salvar
+            </button>
+        `;
 
-`✅ ${data.message}
-Paciente: ${data.paciente}
-Sintoma: ${data.sintoma}`;
-
-    }catch(error){
-
-        box.innerHTML =
-            "Erro ao salvar atendimento.";
-
+    } catch(error) {
+        box.innerHTML = "Erro ao realizar pré-triagem com IA. Tentando salvar direto...";
+        confirmarSalvarAtendimento(nome, sintoma);
     }
+}
 
+async function confirmarSalvarAtendimento(nome, sintoma) {
+    const box = document.getElementById('resultado');
+    box.innerHTML = "Salvando no sistema...";
+
+    try {
+        const response = await fetch(`${API_URL}/atendimento`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${TOKEN}`
+            },
+            body: JSON.stringify({ nome, sintoma })
+        });
+
+        const data = await response.json();
+
+        box.innerHTML = `
+            ✅ ${data.message}
+            <br>Paciente: ${data.paciente}
+            <br>Sintoma: ${data.sintoma}
+        `;
+
+    } catch(error) {
+        box.innerHTML = "Erro ao salvar atendimento.";
+    }
 }
 
 /* PUT */

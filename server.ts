@@ -2,13 +2,13 @@ import express, { Request, Response, NextFunction } from 'express';
 import sqlite3 from 'sqlite3';
 import cors from 'cors';
 import jwt from 'jsonwebtoken'; 
-
+import { GoogleGenAI } from '@google/genai';
 
 console.log("🚀 Iniciando servidor...");
 
 const app = express();
 const SECRET_KEY = "chave_secreta_jwt"; // Em produção, use variáveis de ambiente
-
+const ai = new GoogleGenAI({ apiKey: 'escondi' });
 app.use(cors());
 app.use(express.json());
 
@@ -25,7 +25,7 @@ const verificarToken = (req: Request, res: Response, next: NextFunction) => {
     const token = req.headers['authorization'] as string;
     if (!token) return res.status(403).json({ error: "Acesso negado. Token não fornecido." });
 
-    const tokenLimpo = token.startsWith('Bearer ') ? token.split(' ') [1] : token;
+    const tokenLimpo = token.startsWith('Bearer ') ? token.split(' ')[1] : token;
 
     jwt.verify(tokenLimpo, SECRET_KEY, (err: any, decoded: any) => {
         if (err) return res.status(401).json({ error: "Token inválido ou expirado." });
@@ -36,7 +36,6 @@ const verificarToken = (req: Request, res: Response, next: NextFunction) => {
 
 // 🔹 Criação das tabelas e dados iniciais
 db.serialize(() => {
-
     db.run(`CREATE TABLE IF NOT EXISTS pacientes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT NOT NULL
@@ -62,7 +61,6 @@ db.serialize(() => {
         PRIMARY KEY (consulta_id, sintoma_id)
     )`);
 
-    // 🔹 Inserção inicial segura
     db.get("SELECT COUNT(*) AS count FROM pacientes", (err: Error | null, row: any) => {
         if (err) {
             console.error("Erro ao verificar dados iniciais:", err.message);
@@ -71,7 +69,6 @@ db.serialize(() => {
 
         if (row && row.count === 0) {
             console.log("📦 Inserindo dados iniciais...");
-
             db.run(`INSERT INTO pacientes (nome) VALUES ('Ana'), ('Carlos'), ('Beatriz')`);
             db.run(`INSERT INTO sintomas (descricao) VALUES ('Febre'), ('Dor de cabeça'), ('Tosse')`);
             db.run(`INSERT INTO consultas (paciente_id, data_consulta) VALUES 
@@ -85,14 +82,13 @@ db.serialize(() => {
 app.post('/api/login', (req: Request, res: Response) => {
     const { username, password } = req.body;
 
-    // Simular validação (Username: admin / Senha: 123)
     if (username === 'admin' && password === '123') {
         const token = jwt.sign({ user: username }, SECRET_KEY, { expiresIn: '1h' });
         return res.json({ auth: true, token });
     }
     res.status(401).json({ error: "Usuário ou senha incorretos!" });
 });
-// 🔹 Teste rápido da API
+
 app.get('/', (_req: Request, res: Response) => {
     res.send('✅ API funcionando!');
 });
@@ -179,47 +175,80 @@ app.get('/api/etapa10', verificarToken, (_req: Request, res: Response) => {
     });
 });
 
+
+/* 🔹 NOVA ROTA: POST Pré-Triagem com IA (Adicionada Aqui) */
+interface PreTriagemBody {
+    sintoma: string;
+}
+
+app.post('/api/pre-triagem', verificarToken, async (req: Request<{}, {}, PreTriagemBody>, res: Response) => {
+    const { sintoma } = req.body;
+
+    if (!sintoma || typeof sintoma !== 'string' || sintoma.trim() === '') {
+        return res.status(400).json({ error: "Sintoma inválido ou não fornecido." });
+    }
+
+    try {
+        // 3. CHAMADA AO MODELO GEMINI
+        // Usamos o gemini-2.5-flash por ser extremamente rápido e ideal para textos curtos
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Você é um assistente médico especialista em triagem hospitalar. 
+            Analise o seguinte sintoma do paciente e responda estritamente com:
+            1) O nível de criticidade (Baixo, Médio ou Alto).
+            2) Uma recomendação rápida de conduta.
+            Seja direto, curto e use emojis para facilitar a leitura.
+            
+            Sintoma: ${sintoma}`,
+        });
+
+        const analise = response.text;
+
+        // Retorna a resposta gerada pelo Gemini para o Front-end
+        return res.json({ analise });
+
+    } catch (error) {
+        console.error("Erro ao chamar o Gemini:", error);
+        return res.status(500).json({ error: "Falha ao processar a pré-triagem com Inteligência Artificial." });
+    }
+});
+
 // 🔹 POST Atendimento
 interface AtendimentoBody {
     nome: string;
     sintoma: string;
 }
 
-app.post('/api/atendimento', (req: Request<{}, {}, AtendimentoBody>, res: Response) => {
+app.post('/api/atendimento', verificarToken, (req: Request<{}, {}, AtendimentoBody>, res: Response) => {
     const { nome, sintoma } = req.body;
 
-if (
-    typeof nome !== 'string' ||
-    typeof sintoma !== 'string' ||
-    nome.trim() === '' ||
-    sintoma.trim() === '' ||
-    !/^[A-Za-zÀ-ÿ\s]+$/.test(nome)
-) {
-    return res.status(400).json({
-        error: "Nome inválido. Use apenas letras."
-    });
-}
+    if (
+        typeof nome !== 'string' ||
+        typeof sintoma !== 'string' ||
+        nome.trim() === '' ||
+        sintoma.trim() === '' ||
+        !/^[A-Za-zÀ-ÿ\s]+$/.test(nome)
+    ) {
+        return res.status(400).json({
+            error: "Nome inválido. Use apenas letras."
+        });
+    }
 
     const dataAtual = new Date().toISOString().split('T')[0];
 
-    // 🔹 Busca paciente existente
     db.get(`SELECT id FROM pacientes WHERE nome = ?`, [nome], (err: Error | null, row: any) => {
-
         if (err) return res.status(500).json({ error: err.message });
 
         const inserirConsulta = (paciente_id: number) => {
-
             db.run(`INSERT INTO consultas (paciente_id, data_consulta) VALUES (?, ?)`,
                 [paciente_id, dataAtual],
                 function (err: Error | null) {
-
                     if (err) return res.status(500).json({ error: err.message });
 
                     const consulta_id = this.lastID;
 
                     db.get(`SELECT id FROM sintomas WHERE descricao = ?`, [sintoma],
                         (_err: Error | null, row: any) => {
-
                             if (row) {
                                 vincular(consulta_id, row.id);
                             } else {
@@ -234,7 +263,6 @@ if (
                         db.run(`INSERT INTO consulta_sintoma (consulta_id, sintoma_id) VALUES (?, ?)`,
                             [c_id, s_id],
                             (_err: Error | null) => {
-
                                 if (err) return res.status(500).json({ error: err.message });
 
                                 res.json({
@@ -264,7 +292,7 @@ app.put('/api/atendimento/:id', verificarToken, (req: Request, res: Response) =>
     const { nome } = req.body;
     db.run(`UPDATE pacientes SET nome = ? WHERE id = ?`, [nome, id], function(err) {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: "Nome atualizado!" });
+        res.json({ message: "Nome updated!" });
     });
 });
 
@@ -294,7 +322,6 @@ app.listen(PORT, () => {
     console.log(`🔥 Servidor rodando em http://localhost:${PORT}`);
 });
 
-// 🔹 Captura erros silenciosos
 process.on('uncaughtException', (err) => {
     console.error('❌ Erro não tratado:', err);
 });
