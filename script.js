@@ -43,7 +43,6 @@ async function realizarLogin(){
 
         carregarInterfaceLogada();
 
-    }else{
 
         alert("Falha no login!");
 
